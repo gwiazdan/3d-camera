@@ -1,0 +1,5 @@
+[camera]
+translation_speed = 10
+rotation_speed = 60 # 60 degrees
+fov_change_speed = 10
+default_fov = 400

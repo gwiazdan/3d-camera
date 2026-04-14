@@ -1,32 +1,53 @@
-from PySide6.QtWidgets import QMainWindow, QFileDialog, QWidget, QVBoxLayout
-from PySide6.QtGui import QAction, QPainter, QPen, QColor
-from .modeler import load_model
-import numpy as np
-import numpy.typing as npt
+from typing import override
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QAction, QColor, QPainter, QPen, QKeyEvent
+from PySide6.QtWidgets import QFileDialog, QMainWindow, QVBoxLayout, QWidget
+
+from src.camera import Camera
+
+from .modeler import EdgesIndices, VerticesArray, load_model
 
 
 class ModelViewerWidget(QWidget):
     """A custom widget that renders 3D model using PySide6 QPainter."""
 
-    def __init__(self):
-        super().__init__()
-        self.vertices: npt.NDArray[np.float32] | None = None
-        self.edges: npt.NDArray[np.int16] | None = None
-        self.offset: np.ndarray = np.array([0.0, 0.0])
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.vertices: VerticesArray | None = None
+        self.edges: EdgesIndices | None = None
         self.setGeometry(0, 0, 1024, 700)
+        self.camera = None
 
-    def set_model(
-        self, vertices: npt.NDArray[np.float32], edges: npt.NDArray[np.int16]
-    ) -> None:
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_scene)
+        self.timer.start(16)
+
+    @override
+    def keyPressEvent(self, event: QKeyEvent, /) -> None:
+        if not event.isAutoRepeat() and self.vertices is not None:
+            self.camera.pressed_keys.add(event.key())
+
+    @override
+    def keyReleaseEvent(self, event: QKeyEvent, /) -> None:
+        if not event.isAutoRepeat() and self.vertices is not None:
+            self.camera.pressed_keys.discard(event.key())
+
+    def update_scene(self):
+        w = self.width()
+        h = self.height()
+
+        if self.vertices is not None:
+            self.vertices = self.camera.update_state(w, h)
+            self.update()
+
+    def set_model(self, vertices: VerticesArray, edges: EdgesIndices) -> None:
         """Set the model data to be rendered."""
         self.vertices = vertices
         self.edges = edges
         self.update()
-
-    def set_offset(self, offset: np.ndarray) -> None:
-        """Set the offset for camera movement and trigger repaint."""
-        self.offset = offset
-        self.update()
+        self.camera = Camera(vertices)
 
     def paintEvent(self, event) -> None:
         """Paint the model using QPainter - draws from scratch on every update."""
@@ -43,16 +64,10 @@ class ModelViewerWidget(QWidget):
         pen.setWidth(1)
         painter.setPen(pen)
 
-        projected_vertices = [
-            (int(x + self.offset[0]), int(y + self.offset[1]))
-            for x, y, *_ in self.vertices
-        ]
+        v = self.vertices.astype(int)
 
-        for edge in self.edges:
-            start, end = edge
-            start_point = projected_vertices[start]
-            end_point = projected_vertices[end]
-            painter.drawLine(start_point[0], start_point[1], end_point[0], end_point[1])
+        for start, end in self.edges:
+            painter.drawLine(v[start, 0], v[start, 1], v[end, 0], v[end, 1])
 
 
 class MainWindow(QMainWindow):
@@ -65,7 +80,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(central_widget)
         self.setCentralWidget(central_widget)
 
-        self.model_viewer = ModelViewerWidget()
+        self.model_viewer = ModelViewerWidget(self)
         layout.addWidget(self.model_viewer)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -77,14 +92,15 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(self.load_action)
         file_menu.addAction(open_action)
 
-        save_action = QAction("Save", self)
-        file_menu.addAction(save_action)
-
         file_menu.addSeparator()
 
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+    @override
+    def keyPressEvent(self, event: QKeyEvent, /) -> None:
+        self.model_viewer.transform(event)
 
     def load_action(self):
         """
