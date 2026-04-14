@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt
 import numpy as np
 
-from src.modeler import VerticesArray
+from src.window import VerticesArray
 
 from src.config import settings
 
@@ -94,9 +94,11 @@ class Camera:
         MV = R_view @ T
 
         f = self.focal_length
+        aspect_ratio = width / max(height, 1)
 
         P = np.array(
-            [[f, 0, 0, 0], [0, f, 0, 0], [0, 0, 1, 0], [0, 0, 1, 0]], dtype=np.float32
+            [[f / aspect_ratio, 0, 0, 0], [0, f, 0, 0], [0, 0, 1, 0], [0, 0, 1, 0]],
+            dtype=np.float32,
         )
 
         v_final = v @ (P @ MV).T

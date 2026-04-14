@@ -1,11 +1,16 @@
 from typing import override
+from typing import IO
+
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QAction, QColor, QPainter, QPen, QKeyEvent
+from PySide6.QtGui import QAction, QColor, QKeyEvent, QPainter, QPen
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QVBoxLayout, QWidget
+import numpy as np
+import numpy.typing as npt
+
+VerticesArray = npt.NDArray[np.float32]
+EdgesIndices = npt.NDArray[np.int16]
 
 from src.camera import Camera
-
-from .modeler import EdgesIndices, VerticesArray, load_model
 
 
 class ModelViewerWidget(QWidget):
@@ -98,10 +103,6 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-    @override
-    def keyPressEvent(self, event: QKeyEvent, /) -> None:
-        self.model_viewer.transform(event)
-
     def load_action(self):
         """
         Slot triggered when the Open File option is selected.
@@ -117,10 +118,29 @@ class MainWindow(QMainWindow):
             if file_path:
                 print(f"File selected: {file_path}")
                 with open(file_path, "r") as f:
-                    vertices, edges = load_model(f)
+                    vertices, edges = self.load_model(f)
                     self.model_viewer.set_model(vertices, edges)
                     self.model_viewer.update()
             else:
                 print("No file was selected.")
         except Exception as e:
             print(f"An error occurred while loading a file: {e}")
+
+    def load_model(self, file: IO[str]) -> tuple[VerticesArray, EdgesIndices]:
+        v_list: list[list[float]] = []
+        e_list: list[list[int]] = []
+
+        for line in file:
+            parts = line.split()
+            if not parts:
+                continue
+
+            if parts[0] == "v":
+                v_list.append([float(x) for x in parts[1:]])
+            elif parts[0] == "e":
+                e_list.append([int(x) - 1 for x in parts[1:]])
+
+        vertices = np.array(v_list, dtype=np.float32)
+        edges = np.array(e_list, dtype=np.int16)
+
+        return vertices, edges

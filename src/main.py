@@ -10,7 +10,6 @@ if __name__ == "__main__":
             print("Error: Failed to initialize MainWindow")
         else:
             window.show()
-            print("Entering application event loop")  # Debugging log
             sys.exit(app.exec())
     except Exception as e:
         print("An unexpected error occurred:", str(e))
