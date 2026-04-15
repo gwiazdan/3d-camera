@@ -20,19 +20,19 @@ class Camera:
 
         dr = float(settings.camera.translation_speed)
         dangle = np.radians(settings.camera.rotation_speed)
-
+        move = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
         if Qt.Key.Key_W in self.pressed_keys:
-            self.position[2] += dr
+            move[2] += dr
         if Qt.Key.Key_S in self.pressed_keys:
-            self.position[2] -= dr
+            move[2] -= dr
         if Qt.Key.Key_A in self.pressed_keys:
-            self.position[0] -= dr
+            move[0] -= dr
         if Qt.Key.Key_D in self.pressed_keys:
-            self.position[0] += dr
+            move[0] += dr
         if Qt.Key.Key_Space in self.pressed_keys:
-            self.position[1] += dr
+            move[1] += dr
         if Qt.Key.Key_Shift in self.pressed_keys:
-            self.position[1] -= dr
+            move[1] -= dr
 
         if Qt.Key.Key_Q in self.pressed_keys:
             self.angles[0] -= dangle
@@ -52,9 +52,9 @@ class Camera:
         if Qt.Key.Key_Minus in self.pressed_keys:
             self.focal_length -= 10.0
 
-        return self._get_transformed_vertices(width, height)
+        return self._get_transformed_vertices(width, height, move)
 
-    def _get_transformed_vertices(self, width: int, height: int) -> VerticesArray:
+    def _get_transformed_vertices(self, width: int, height: int, move=np.array([0,0,0, 0],dtype=np.float32)) -> VerticesArray:
         ones = np.ones((self._vertices.shape[0], 1), dtype=np.float32)
         v = np.hstack([self._vertices, ones])
         T = np.eye(4, dtype=np.float32)
@@ -92,16 +92,17 @@ class Camera:
 
         R_view = Rx @ Ry @ Rz
         MV = R_view @ T
-
+        rotated_move = R_view.T @ move
+        T[:3, 3] = rotated_move[:3].flatten()
+        MV_final = MV @ T
         f = self.focal_length
-        aspect_ratio = width / max(height, 1)
-
+        self.position += rotated_move[:3]
         P = np.array(
-            [[f / aspect_ratio, 0, 0, 0], [0, f, 0, 0], [0, 0, 1, 0], [0, 0, 1, 0]],
+            [[f, 0, 0, 0], [0, f, 0, 0], [0, 0, 1, 0], [0, 0, 1, 0]],
             dtype=np.float32,
         )
 
-        v_final = v @ (P @ MV).T
+        v_final = v @ (P @ MV_final).T
         w = v_final[:, 3:4]
         mask = w[:, 0] > 0.1
 
